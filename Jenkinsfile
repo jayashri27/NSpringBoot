@@ -1,44 +1,55 @@
-
-node {
-  
-  def image
-  def mvnHome = tool 'Maven3'
-
-  
-     stage ('checkout') {
-        checkout([$class: 'GitSCM', branches: [[name: '*/master']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: '9ffd4ee4-3647-4a7d-a357-5e8746463282', url: 'https://bitbucket.org/ananthkannan/myawesomeangularapprepo/']]])       
+pipeline {
+    agent any
+    tools {
+    maven 'MAVEN'
         }
-    
-    
-    stage ('Build') {
-            sh 'mvn -f MyAwesomeApp/pom.xml clean install'            
-        }
-        
-    stage ('archive') {
-            archiveArtifacts '**/*.jar'
-        }
-        
-    stage ('Docker Build') {
-         // Build and push image with Jenkins' docker-plugin
-        withDockerServer([uri: "tcp://localhost:4243"]) {
-
-            withDockerRegistry([credentialsId: "fa32f95a-2d3e-4c7b-8f34-11bcc0191d70", url: "https://index.docker.io/v1/"]) {
-            image = docker.build("ananthkannan/mywebapp", "MyAwesomeApp")
-            image.push()
-            
+    /*environment {
+        registry = "664201875222.dkr.ecr.us-east-2.amazonaws.com/imagerepo"
+    }*/    
+    stages {
+        stage('GitCheckout') {
+            steps {
+                git branch: 'main', credentialsId: 'GITHUB_CREDS', url: 'https://github.com/jayashri27/NSpringBoot'
             }
         }
-    }
-    
-       stage('docker stop container') {
-            sh 'docker ps -f name=myContainer -q | xargs --no-run-if-empty docker container stop'
-            sh 'docker container ls -a -fname=myContainer -q | xargs -r docker container rm'
-
-       }
-
-    stage ('Docker run') {
-
-        image.run("-p 8085:8085 --rm --name myContainer")
-
+        stage('Build'){
+            steps{
+                sh 'mvn clean install'
+            }
+        }
+        
+        stage('TruffleHog'){
+            steps{
+              sh 'docker run -t trufflesecurity/trufflehog:latest github --no-update --repo  https://github.com/jayashri27/NSpringBoot.git > report'
+              sh  'cat report' 
+            }
+        }
+        /*stage('docker login'){
+            steps{
+            withCredentials([string(credentialsId: 'Docker_Hub', variable: 'PASSWORD')]) {
+            sh 'docker login -u jayashrimahale22 -p $PASSWORD'
+            }
+          }
+        }*/
+        /*stage('Building image') {
+           steps{
+            script {
+          dockerImage = docker.build registry 
+                 }
+              }
+          }
+        stage('Pushing to ECR') {
+           steps{  
+           script {
+                sh 'aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 664201875222.dkr.ecr.us-east-1.amazonaws.com'
+                sh 'docker push 664201875222.dkr.ecr.us-east-1.amazonaws.com/imagerepo:latest'
+         }
+        }
+      }
+        stage('kubernetes_deployment'){
+            steps{
+                sh 'kubectl apply -f eks-deploy-k8s.yaml'
+            }
+        }*/
     }
 }
